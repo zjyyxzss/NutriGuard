@@ -19,6 +19,6 @@ public class DietController {
      */
     @PostMapping("/diet/analyze")
     public String analyze(@RequestParam Long userId, @RequestParam String text) {
-        return smartDietService.analyzeAndRecord(userId, text);
+        return smartDietService.analyzeAndRecord(userId, text, null);
     }
 }

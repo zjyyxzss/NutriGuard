@@ -1,8 +1,7 @@
 package com.nutri.guard.service;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSON;
-import com.nutri.guard.dto.FoodDataDTO;
+
 import com.nutri.guard.entity.FoodKnowledge;
 import com.nutri.guard.mapper.FoodKnowledgeMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -18,8 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
+
 
 @Slf4j
 @Service
