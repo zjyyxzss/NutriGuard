@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: nutri-guard
+
+  # 1. 数据库配置 (连接到你的 Ubuntu Docker)
+  datasource:
+    # 这里的 localhost 是指 Ubuntu 虚拟机内部。如果你在 Windows 运行，请改成 Ubuntu 的 IP
+    # 但推荐你直接把项目放 Ubuntu 跑，或者配置好端口转发
+    url: jdbc:postgresql://192.168.100.129:5432/nutri_guard
+    username: postgres
+    password: password
+    driver-class-name: org.postgresql.Driver
+
+  # 2. Spring AI 配置
+  ai:
+    openai:
+      # 这里填你的 API Key。
+      # 如果没有，先随便填一个 sk-xxx，否则启动会报错
+      api-key: sk-1fd59aed2b9c40acb067fe7b32f0a576
+      # 如果你用国内的大模型（如月之暗面/Kimi），这里可以填国内的 base-url
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      chat:
+        options:
+          model: qwen-turbo
+
+    # 3. 向量数据库配置 (PgVector)
+      embedding:
+       options:
+
+        model: text-embedding-v1
+
+# MyBatis Plus 配置
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 打印 SQL 日志
