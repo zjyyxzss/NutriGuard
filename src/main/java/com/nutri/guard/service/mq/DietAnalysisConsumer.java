@@ -1,10 +1,13 @@
 package com.nutri.guard.service.mq;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nutri.guard.config.RabbitMQConfig;
 import com.nutri.guard.dto.AnalysisTask;
 
 
+import com.nutri.guard.entity.UserProfile;
+import com.nutri.guard.mapper.UserProfileMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -40,6 +43,8 @@ public class DietAnalysisConsumer {
     private StringRedisTemplate redisTemplate;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private UserProfileMapper userProfileMapper;
 
     // 定义记忆保留的轮数（例如保留最近 10 条）
     private static final int MEMORY_SIZE = 10;
@@ -61,13 +66,26 @@ public class DietAnalysisConsumer {
                     .map(Document::getContent)
                     .collect(Collectors.joining("\n"));
 
+            UserProfile profile = userProfileMapper.selectOne(new QueryWrapper<UserProfile>().eq("user_id", task.getUserId()));
+            String userProfileStr = "未知";
+            if (profile != null) {
+                userProfileStr = String.format("身高:%scm, 体重:%skg, 过敏原:%s, 偏好:%s",
+                        profile.getHeight(), profile.getWeight(), profile.getAllergies(), profile.getPreferences());
+            }
+            log.info("========================================");
+            log.info("【调试】当前读取到的用户档案: {}", userProfileStr);
+            log.info("========================================");
             // 2. 准备系统预设 (System Message)
             String systemText = """
-                你是一个专业的营养师助手。请利用【已知知识】回答用户。
-                【已知知识】：
-                {knowledge}
-                你的任务：分析风险并必要时记录饮食。
-                """;
+                    你是一个专业且乐于助人的营养师助手。
+                    【当前用户信息】：%s
+                    【核心指令】：
+                     1. 请结合【用户信息】分析饮食建议。如果用户有过敏原（如海鲜、花生等），请务必进行风险提示！
+                     2. 利用【已知知识】来辅助回答。
+                     3. 只有当用户的意图是“记录”时，才调用 'recordDiet' 工具。
+                    【已知知识】：
+                      {knowledge}
+                """.formatted(userProfileStr); // 将档案注入 Prompt
             SystemPromptTemplate systemPrompt = new SystemPromptTemplate(systemText);
             Message systemMessage = systemPrompt.createMessage(Map.of("knowledge", knowledge, "userId", task.getUserId()));
 
@@ -107,6 +125,9 @@ public class DietAnalysisConsumer {
             String aiResponse = chatClient.call(prompt).getResult().getOutput().getContent();
 
 
+            log.info("AI 响应: {}", aiResponse);
+
+
             SimpleHistoryMsg userMsgDto = new SimpleHistoryMsg("user", userText);
             redisTemplate.opsForList().rightPush(memoryKey, objectMapper.writeValueAsString(userMsgDto));
 
@@ -114,13 +135,20 @@ public class DietAnalysisConsumer {
             SimpleHistoryMsg aiMsgDto = new SimpleHistoryMsg("assistant", aiResponse);
             redisTemplate.opsForList().rightPush(memoryKey, objectMapper.writeValueAsString(aiMsgDto));
 
-            //  设置过期时间 (例如 1 小时)
+            //  设置过期时间
             redisTemplate.expire(memoryKey, 1, TimeUnit.DAYS);
 
             log.info("处理完成, ConvID: {}", convId);
 
         } catch (Exception e) {
             log.error("AI 处理失败, ConvID: {}, 错误信息: {}", convId, e.getMessage());
+            // 新增：往 Redis 写一个错误提示，方便前端知道出错了
+            SimpleHistoryMsg errorMsg = new SimpleHistoryMsg("assistant", "抱歉，AI 处理您的请求时出现异常，请稍后重试。");
+            try {
+                redisTemplate.opsForList().rightPush(memoryKey, objectMapper.writeValueAsString(errorMsg));
+            } catch (Exception ex) {
+                log.error("写入 Redis 错误提示失败, ConvID: {}, 错误信息: {}", convId, ex.getMessage());
+            }
         }
     }
 
